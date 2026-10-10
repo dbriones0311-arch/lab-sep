@@ -1,0 +1,36 @@
+# ========================================================================
+# ÍNDICE DEL ARCHIVO (números de línea de este mismo archivo)
+# ========================================================================
+# Líneas   14 a   54 : 1. Utilidades y validación
+# Líneas   57 a  402 : 2. Capa de física (modelos, sin interfaz)
+#        63 a   92   PowerBalanceModel
+#        95 a  171   MotorStartingModel
+#       174 a  198   DailyLoadProfile
+#       201 a  208   reactive_from_pf
+#       209 a  261   FeederModel
+#       262 a  339   FrequencyModel
+#       342 a  363   EquipmentImpactModel
+#       366 a  402   OverexcitationModel
+# Líneas  405 a  552 : 3. Capa de interfaz (helpers, CSS, clase base, registro)
+#       411 a  419   AppContext
+#       420 a  426   Question
+#       429 a  438   render_quiz
+#       441 a  446   show
+#       449 a  459   style_fig
+#       462 a  465   kpi_row
+#       468 a  473   md_table
+#       476 a  506   inject_css
+#       509 a  546   LabModule
+#       549 a  552   register_module
+# Líneas  555 a  608 : Módulo 1: Control del SEP
+# Líneas  611 a  666 : Módulo 2: Arranque de motores
+# Líneas  669 a  713 : Módulo 3: Cambios de carga
+# Líneas  716 a  765 : Módulo 4: Práctica de tensión
+# Líneas  768 a  814 : Módulo 5: Equipos y tensión
+# Líneas  817 a  856 : Módulo 6: Variación de frecuencia
+# Líneas  859 a  916 : Módulo 7: Práctica de frecuencia
+# Líneas  919 a  959 : Módulo 8: Equipos y frecuencia
+# Líneas  962 a 1201 : Módulo 9 (parte física): GridScenario, VoltageSagTolerance, SixBusNetwork
+# Líneas 1204 a 1562 : Módulo 9 (parte interfaz): SixBusNetworkModule
+# Líneas 1564 a 1595 : 4. Punto de entrada (main)
+# ========================================================================
