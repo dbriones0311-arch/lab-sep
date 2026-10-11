@@ -958,8 +958,14 @@ class FrequencyEquipmentModule(LabModule):
             ("0.90 pu", "1.11 pu", "1.00 pu"), 1,
             "V/f = 1/0.9 ≈ 1.11 pu: sobreexcitación, el flujo es proporcional a V/f.")])
 
-
-import dataclasses as _dc 
+# =============================================================================
+# 2-bis. FÍSICA: RED DE 6 BARRAS (flujo de potencia, fallas, renovable, control)
+# -----------------------------------------------------------------------------
+# PEGAR ESTE BLOQUE COMPLETO justo ANTES de la sección
+#     "# 4. PUNTO DE ENTRADA"   (es decir, después del Módulo 8).
+# No hay que tocar main(): el módulo nuevo se registra solo con @register_module.
+# =============================================================================
+import dataclasses as _dc  # noqa: E402  (se usa _dc.replace para variar escenarios)
 
 REN_Q_MODES: Tuple[str, ...] = ("FP unitario", "Inyecta Q (FP 0.95)", "Absorbe Q (FP 0.95)")
 
@@ -1201,6 +1207,112 @@ class SixBusNetwork:
         return np.abs(v_fault), float(abs(i_f) * i_base_ka)
 
 
+@dataclass(frozen=True)
+class EquipmentItem:
+    """Equipo de una central o subestación con sus límites de tensión [pu] (ILUSTRATIVOS)."""
+
+    location: str
+    name: str
+    v_dmg_low: float | None
+    v_warn_low: float | None
+    v_warn_high: float
+    v_dmg_high: float
+    effect_low: str
+    effect_high: str
+
+
+class PlantEquipmentCatalog:
+    """Catálogo didáctico de equipos afectados por sub/sobretensión sostenida."""
+
+    CENTRAL, SUBSTATION = "Central generadora", "Subestación"
+    AXIS: ClassVar[Tuple[float, float]] = (0.60, 1.40)
+    _E = EquipmentItem
+    ITEMS: ClassVar[Tuple[EquipmentItem, ...]] = (
+        _E("Central generadora", "Generador síncrono (estator y rotor)", 0.85, 0.95, 1.05, 1.10,
+           "Sube la corriente de estator y el calentamiento; riesgo de pérdida de sincronismo.",
+           "Sobreexcitación (V/Hz alto): calentamiento del núcleo y del rotor, disparo por protección 24."),
+        _E("Central generadora", "Excitatriz / AVR y rectificadores", 0.70, 0.85, 1.10, 1.25,
+           "La excitación pierde techo y no sostiene la tensión: colapso de reactivo.",
+           "Sobretensión en tiristores/diodos del puente y falla de aislamiento."),
+        _E("Central generadora", "Transformador elevador (GSU)", None, 0.90, 1.05, 1.10,
+           "Sin daño directo: más corriente, más pérdidas y pobre regulación.",
+           "Saturación del núcleo, corriente de magnetización alta, calentamiento y gases en el aceite."),
+        _E("Central generadora", "Transformador de servicios auxiliares", None, 0.90, 1.05, 1.10,
+           "Caída de tensión en toda la barra de auxiliares.",
+           "Sobreexcitación y sobretensión en motores y contactores aguas abajo."),
+        _E("Central generadora", "Motores de servicios auxiliares (bombas, ventiladores, molinos)", 0.75, 0.90,
+           1.10, 1.20,
+           "Par ∝ V²: se frenan o se calan, corriente alta y calentamiento; puede disparar la unidad.",
+           "Saturación, más pérdidas y sobrecalentamiento del aislamiento."),
+        _E("Central generadora", "Contactores y arrancadores (CCM)", 0.70, 0.85, 1.10, 1.20,
+           "Se sueltan (drop-out) y paran bombas/ventiladores: posible disparo de caldera o turbina.",
+           "Sobrecalentamiento de bobinas y falla de aislamiento."),
+        _E("Central generadora", "Variadores de frecuencia (VFD)", 0.80, 0.90, 1.10, 1.20,
+           "Disparo por subtensión del bus DC y paro del proceso.",
+           "Sobretensión en el bus DC: falla de IGBT y capacitores."),
+        _E("Central generadora", "Baterías y cargadores DC", 0.80, 0.90, 1.10, 1.20,
+           "El cargador no sostiene el bus DC: se descargan las baterías y se pierde control/protección.",
+           "Sobrecarga y gaseo de baterías, falla del cargador."),
+        _E("Central generadora", "Sistemas de control (DCS/PLC) y UPS", 0.80, 0.90, 1.10, 1.20,
+           "Reinicios y pérdida de señales; el UPS pasa a baterías.",
+           "Fuentes de alimentación dañadas y pérdida de tarjetas."),
+        _E("Central generadora", "Cables y aislamiento de media tensión", None, None, 1.10, 1.20,
+           "Sin efecto directo.",
+           "Envejecimiento acelerado y descargas parciales en el aislamiento."),
+        _E("Subestación", "Transformador de potencia", None, 0.90, 1.05, 1.10,
+           "Sin daño directo: más corriente, más pérdidas y pobre regulación.",
+           "Sobreexcitación: aumentan las pérdidas en vacío, calentamiento, gases en el aceite y armónicos."),
+        _E("Subestación", "Regulador de tap (OLTC) y su motor", 0.70, 0.85, 1.10, 1.20,
+           "El accionamiento falla al conmutar y el control pierde alimentación.",
+           "Mayor esfuerzo en el selector y en los contactos."),
+        _E("Subestación", "Pararrayos (óxido metálico)", None, None, 1.05, 1.15,
+           "Sin efecto directo.",
+           "Opera cerca de su tensión máxima continua: fuga térmica y posible explosión."),
+        _E("Subestación", "Aisladores y boquillas", None, None, 1.10, 1.25,
+           "Sin efecto directo.", "Descargas superficiales (flashover) y contornamiento."),
+        _E("Subestación", "Interruptores y seccionadores", None, None, 1.10, 1.20,
+           "Sin efecto directo.",
+           "Menor margen de aislamiento y de recuperación de tensión al interrumpir."),
+        _E("Subestación", "Transformadores de medida (TP y TC)", None, 0.90, 1.10, 1.20,
+           "Errores de medición: los relés reciben información incorrecta.",
+           "Saturación y ferrorresonancia en TP, calentamiento."),
+        _E("Subestación", "Bancos de capacitores", None, 0.90, 1.10, 1.20,
+           "Entregan menos reactivo (Q ∝ V²): menos soporte justo cuando se necesita.",
+           "Sobrecarga de kVAr ∝ V², falla de unidades e inflado de las latas."),
+        _E("Subestación", "Reactores shunt", None, None, 1.10, 1.20,
+           "Absorben menos reactivo (Q ∝ V²).", "Saturación, calentamiento y armónicos."),
+        _E("Subestación", "Relés de protección y medición digital", 0.60, 0.80, 1.10, 1.25,
+           "Pueden reiniciar o no operar: protección sin respuesta.",
+           "Daño de fuentes y de entradas de tensión."),
+        _E("Subestación", "Baterías y cargadores de la subestación", 0.80, 0.90, 1.10, 1.20,
+           "Se descargan las baterías: riesgo de perder disparo y control.",
+           "Sobrecarga y gaseo de baterías, falla del cargador."),
+        _E("Subestación", "Cables de potencia", None, None, 1.10, 1.20,
+           "Sin efecto directo.",
+           "Envejecimiento acelerado y descargas parciales en el aislamiento."),
+    )
+
+    @classmethod
+    def status(cls, item: EquipmentItem, v_pu: float) -> Tuple[str, str]:
+        """Devuelve (estado, efecto) del equipo a tensión sostenida ``v_pu``."""
+        if item.v_dmg_low is not None and v_pu < item.v_dmg_low:
+            return "⛔ Falla / daño", item.effect_low
+        if item.v_warn_low is not None and v_pu < item.v_warn_low:
+            return "⚠️ En riesgo", item.effect_low
+        if v_pu > item.v_dmg_high:
+            return "⛔ Falla / daño", item.effect_high
+        if v_pu > item.v_warn_high:
+            return "⚠️ En riesgo", item.effect_high
+        return "✅ Normal", "Opera dentro de su rango de tensión."
+
+    @classmethod
+    def evaluate(cls, v_pu: float, location: str | None = None) -> List[Tuple[EquipmentItem, str, str]]:
+        """Evalúa los equipos de ``location`` (o todos si es ``None``)."""
+        require_range("Tensión", v_pu, 0.0, 2.0)
+        return [(it, *cls.status(it, v_pu)) for it in cls.ITEMS
+                if location is None or it.location == location]
+
+
 # =============================================================================
 # 3-bis. INTERFAZ: MÓDULO 9
 # =============================================================================
@@ -1264,9 +1376,16 @@ class SixBusNetworkModule(LabModule):
                             cap_bus=int(cap_bus), cap_mvar=float(cap), reactor_bus=int(rea_bus),
                             reactor_mvar=float(rea))
 
+    @staticmethod
+    def _default_notes(net: SixBusNetwork) -> Dict[int, str]:
+        """Rótulos por barra: generación/red, ciudad (residencial) e industria."""
+        icons = {"grid": "🏭 Central / Red", "res": "🏘️ Ciudad", "ind": "🏗️ Industria"}
+        return {i: icons[k] for i, k in enumerate(net.KINDS) if k in icons}
+
     def _diagram(self, net: SixBusNetwork, vm: np.ndarray, flows: List[Dict[str, float]],
-                 sc: GridScenario) -> go.Figure:
-        """Diagrama unifilar con flechas de flujo de P y color por tensión."""
+                 sc: GridScenario, notes: Dict[int, str] | None = None,
+                 title: str = "Diagrama unifilar: tensión por barra y flujo de P entre barras") -> go.Figure:
+        """Diagrama unifilar con generación/red, ciudad, motores, flechas de P y color por tensión."""
         fig = go.Figure()
         for fl in flows:
             (x0, y0), (x1, y1) = net.COORDS[fl["from"]], net.COORDS[fl["to"]]
@@ -1304,10 +1423,13 @@ class SixBusNetworkModule(LabModule):
                 cx, cy = net.COORDS[bus]
                 fig.add_annotation(x=cx + 0.35, y=cy - (0.0 if sym.endswith("C") else 0.25),
                                    text=f"{sym} {qty:.0f} MVAr", showarrow=False)
+        for bus, text in (notes if notes is not None else self._default_notes(net)).items():
+            nx, ny = net.COORDS[bus]
+            fig.add_annotation(x=nx, y=ny - 0.78, text=text, showarrow=False, font=dict(size=12))
         fig.update_xaxes(visible=False, range=[-0.5, 4.5])
-        fig.update_yaxes(visible=False, range=[-0.9, 2.9])
-        fig.update_layout(template=self.ctx.template, height=470, margin=dict(l=10, r=10, t=50, b=10),
-                          title="Diagrama unifilar: tensión por barra y flujo de P entre barras")
+        fig.update_yaxes(visible=False, range=[-1.4, 3.0])
+        fig.update_layout(template=self.ctx.template, height=500, margin=dict(l=10, r=10, t=50, b=10),
+                          title=title)
         return fig
 
     # -------------------------------------------------------- pestaña 1 -----
@@ -1413,86 +1535,113 @@ class SixBusNetworkModule(LabModule):
 
     # -------------------------------------------------------- pestaña 3 -----
     def _tab_motor(self, net: SixBusNetwork, sc: GridScenario, case: Dict[str, object]) -> None:
+        st.markdown("Generación/red → subestación → **motores industriales** en paralelo con la "
+                    "**ciudad** (cargas residenciales). Observe cuánto cae la tensión de la ciudad "
+                    "cuando arrancan los motores.")
         a, b, c = st.columns(3)
-        bus = a.selectbox("Barra del motor", [3, 5], format_func=lambda i: net.NAMES[i], key=self.key("mbus"))
-        p_mw = a.slider("Potencia del motor [MW]", 0.5, 5.0, 3.0, 0.5, key=self.key("mp"))
+        p4 = a.slider("Motor en B4 Industrial [MW]", 0.0, 5.0, 3.0, 0.5, key=self.key("mp4"))
+        p6 = a.slider("Motor en B6 Industrial [MW]", 0.0, 5.0, 2.0, 0.5, key=self.key("mp6"))
         t_acc = b.slider("Tiempo de aceleración [s]", 2.0, 20.0, 8.0, 1.0, key=self.key("mt"))
         load_t = b.slider("Par resistente [pu]", 0.0, 1.5, 0.5, 0.05, key=self.key("mtl"))
         method = c.radio("Método de arranque", MotorStartingModel.METHODS, key=self.key("mm"))
-        mm = MotorStartingModel(p_mw * 1000.0, 13800.0, t_acc_s=t_acc)
+        powers = {bus: p for bus, p in ((3, p4), (5, p6)) if p >= 0.5}
+        if not powers:
+            st.info("Active al menos un motor (≥ 0.5 MW).")
+            return
+        models = {bus: MotorStartingModel(p * 1000.0, 13800.0, t_acc_s=t_acc) for bus, p in powers.items()}
+        ref = next(iter(models.values()))
         t = np.linspace(0.0, 1.2 * t_acc, 31)
         res_buses = [i for i in net.LOAD_BUSES if net.KINDS[i] == "res"]
+        v_base = np.abs(case["v"])
 
-        def run(m: str) -> Tuple[np.ndarray, np.ndarray] | None:
-            mult, pf = mm._shape(m, t)
-            vmat, cur = np.zeros((len(t), net.N)), np.zeros(len(t))
+        def run(m: str):
+            mult, pf = ref._shape(m, t)
+            vmat = np.zeros((len(t), net.N))
+            vph = np.zeros((len(t), net.N), dtype=complex)
+            cur = {bus: np.zeros(len(t)) for bus in models}
             for k in range(len(t)):
-                s_pu = mult[k] * mm.s_rated_kva / 1000.0 / net.s_base_mva * complex(
-                    pf[k], math.sqrt(max(1.0 - pf[k] ** 2, 0.0)))
                 y_ex = np.zeros(net.N, dtype=complex)
-                y_ex[bus] = np.conj(s_pu)
+                for bus, mm in models.items():
+                    s_pu = mult[k] * mm.s_rated_kva / 1000.0 / net.s_base_mva * complex(
+                        pf[k], math.sqrt(max(1.0 - pf[k] ** 2, 0.0)))
+                    y_ex[bus] += np.conj(s_pu)
                 out = net.solve(sc, y_ex)
                 if not out["converged"]:
                     return None
-                vmat[k] = np.abs(out["v"])
-                cur[k] = mult[k] * mm.i_rated_a * vmat[k, bus]
-            return vmat, cur
+                vph[k], vmat[k] = out["v"], np.abs(out["v"])
+                for bus, mm in models.items():
+                    cur[bus][k] = mult[k] * mm.i_rated_a * vmat[k, bus]
+            return vmat, vph, cur
+
+        def summary(m: str, out) -> Dict[str, object]:
+            vm_, _, cu_ = out
+            v_motor = min(float(vm_[:, bus].min()) for bus in models)
+            drop = max((v_base[i] - float(vm_[:, i].min())) / v_base[i] * 100.0 for i in res_buses)
+            torque = min(models[bus].start_torque_pu(m, float(vm_[:, bus].min())) for bus in models)
+            return {"Método": m, "I pico total [A]": round(float(sum(cu_.values()).max()), 0),
+                    "V mín motores [pu]": round(v_motor, 3),
+                    "V mín ciudad [pu]": round(float(vm_[:, res_buses].min()), 3),
+                    "Caída en ciudad [%]": round(drop, 1), "Par arranque mín [pu]": round(torque, 2)}
 
         results = {m: run(m) for m in MotorStartingModel.METHODS}
-        rows = []
-        for m, out in results.items():
-            if out is None:
-                rows.append({"Método": m, "I pico [A]": "—", "V mín motor [pu]": "colapso",
-                             "V mín residencial [pu]": "colapso", "Par arranque [pu]": "—"})
-                continue
-            vm_, cu_ = out
-            rows.append({"Método": m, "I pico [A]": round(float(cu_.max()), 0),
-                         "V mín motor [pu]": round(float(vm_[:, bus].min()), 3),
-                         "V mín residencial [pu]": round(float(vm_[:, res_buses].min()), 3),
-                         "Par arranque [pu]": round(mm.start_torque_pu(m, float(vm_[:, bus].min())), 2)})
+        rows = [summary(m, o) if o is not None else
+                {"Método": m, "I pico total [A]": "—", "V mín motores [pu]": "colapso",
+                 "V mín ciudad [pu]": "colapso", "Caída en ciudad [%]": "—", "Par arranque mín [pu]": "—"}
+                for m, o in results.items()]
         sel = results[method]
         if sel is None:
-            st.error("Colapso de tensión con este motor y método: use arranque suave/VFD, reduzca la "
+            st.error("Colapso de tensión con estos motores y método: use arranque suave/VFD, reduzca la "
                      "potencia o añada compensación.")
             md_table(rows)
             return
-        vmat, cur = sel
-        v_base = np.abs(case["v"])
+        vmat, vph, cur = sel
+        dt = float(t[1] - t[0])
+        t_show = st.slider("Instante mostrado en el diagrama [s] (0 s = máximo arranque)", 0.0,
+                           float(t[-1]), 0.0, dt, key=self.key("mts"))
+        k = int(np.argmin(np.abs(t - t_show)))
+        notes = self._default_notes(net)
+        for bus, p in powers.items():
+            notes[bus] = f"⚙️ Motor {p:.1f} MW<br>I = {cur[bus][k]:.0f} A"
+        flows = net.branch_flows(vph[k], sc.tap_steps)
+        show(self._diagram(net, vmat[k], flows, sc, notes,
+                           f"Arranque {method}: t = {t[k]:.1f} s (generación → motores y ciudad)"))
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
-                            subplot_titles=("Tensión en las barras durante el arranque",
-                                            "Corriente de línea del motor"))
+                            subplot_titles=("Tensión en las barras (línea punteada = ciudad)",
+                                            "Corriente de línea de los motores"))
         for i in range(net.N):
+            dash = "dot" if i in res_buses else "solid"
             fig.add_trace(go.Scatter(x=t, y=vmat[:, i], name=net.NAMES[i],
-                                     line=dict(width=4 if i == bus else 2)), 1, 1)
+                                     line=dict(width=4 if i in powers else 2, dash=dash)), 1, 1)
         fig.add_hline(y=0.9, line_dash="dash", line_color="red", row=1, col=1)
-        fig.add_trace(go.Scatter(x=t, y=cur, name="I motor [A]", line=dict(color="orange", width=3)), 2, 1)
+        for bus in models:
+            fig.add_trace(go.Scatter(x=t, y=cur[bus], name=f"I motor {net.NAMES[bus][:2]} [A]"), 2, 1)
+        fig.add_vline(x=float(t[k]), line_dash="dash", line_color="orange")
         fig.update_xaxes(title_text="Tiempo [s]", row=2, col=1)
         fig.update_yaxes(title_text="V [pu]", row=1, col=1)
         fig.update_yaxes(title_text="I [A]", row=2, col=1)
-        show(style_fig(fig, self.ctx, f"Arranque {method} en {net.NAMES[bus]}", height=560))
-        v_min_motor = float(vmat[:, bus].min())
-        v_min_res = float(vmat[:, res_buses].min())
-        torque = mm.start_torque_pu(method, v_min_motor)
-        kpi_row([("I nominal", f"{mm.i_rated_a:.0f} A", None),
-                 ("I de arranque", f"{cur.max():.0f} A", f"{cur.max() / mm.i_rated_a:.1f} × I_n"),
-                 ("V mín en el motor", f"{v_min_motor:.3f} pu", f"{v_min_motor - v_base[bus]:+.3f} pu"),
-                 ("V mín residencial", f"{v_min_res:.3f} pu", None),
-                 ("V a plena carga", f"{vmat[-1, bus]:.3f} pu", None)])
+        show(style_fig(fig, self.ctx, "Respuesta de la red durante el arranque", height=560))
+        info = summary(method, sel)
+        kpi_row([("I de arranque total", f"{info['I pico total [A]']:.0f} A", None),
+                 ("V mín motores", f"{info['V mín motores [pu]']:.3f} pu", None),
+                 ("V mín ciudad", f"{info['V mín ciudad [pu]']:.3f} pu", None),
+                 ("Caída en la ciudad", f"{info['Caída en ciudad [%]']:.1f} %", None),
+                 ("Par arranque mín", f"{info['Par arranque mín [pu]']:.2f} pu", None)])
         if vmat.min() < 0.90:
             st.error("Caída < 0.90 pu en alguna barra: disparo de contactores y pérdida de procesos.")
-        if v_min_res < 0.95:
-            st.warning("Las cargas residenciales caen bajo 0.95 pu: parpadeo (flicker) y subtensión.")
-        if torque < load_t:
-            st.error("El par disponible es menor que el par resistente: el motor NO arranca.")
+        if info["Caída en ciudad [%]"] > 3.0 or info["V mín ciudad [pu]"] < 0.95:
+            st.warning("La ciudad sufre una caída apreciable (> 3 % o < 0.95 pu): parpadeo (flicker) "
+                       "en iluminación y subtensión en electrodomésticos.")
+        if info["Par arranque mín [pu]"] < load_t:
+            st.error("El par disponible es menor que el par resistente: algún motor NO arranca.")
         fig2 = go.Figure()
-        fig2.add_trace(go.Bar(x=list(net.NAMES), y=v_base, name="Sin motor"))
-        fig2.add_trace(go.Bar(x=list(net.NAMES), y=vmat.min(axis=0), name="Mínimo con arranque"))
+        fig2.add_trace(go.Bar(x=list(net.NAMES), y=v_base, name="Antes del arranque"))
+        fig2.add_trace(go.Bar(x=list(net.NAMES), y=vmat.min(axis=0), name="Mínimo durante el arranque"))
         fig2.update_layout(barmode="group")
         fig2.update_yaxes(range=[min(0.6, float(vmat.min()) - 0.05), 1.1])
-        show(style_fig(fig2, self.ctx, "Efecto del motor sobre cada barra", "", "V [pu]", 330))
+        show(style_fig(fig2, self.ctx, "Efecto de los motores sobre cada barra", "", "V [pu]", 330))
         md_table(rows)
-        st.caption("El motor se modela como impedancia constante que se suma a la carga existente; "
-                   "el instante t = 0 es el máximo desarrollo de la corriente de arranque.")
+        st.caption("Los motores se modelan como impedancia constante sumada a la carga existente; "
+                   "t = 0 es el máximo desarrollo de la corriente de arranque.")
 
     # -------------------------------------------------------- pestaña 4 -----
     def _tab_control(self, net: SixBusNetwork, sc: GridScenario, case: Dict[str, object]) -> None:
@@ -1515,6 +1664,16 @@ class SixBusNetworkModule(LabModule):
             kpi_row([("V mín", f"{vm.min():.3f} pu", f"{vm.min() - np.abs(base['v']).min():+.3f} vs sin control"),
                      ("V máx", f"{vm.max():.3f} pu", f"{vm.max() - np.abs(base['v']).max():+.3f} vs sin control"),
                      ("Pérdidas", f"{loss_now:.2f} MW", f"{loss_now - loss_0:+.2f} MW")])
+        with st.expander("🏭 Equipos de la subestación en riesgo con estas tensiones"):
+            for label, volt in (("tensión mínima", float(vm.min())), ("tensión máxima", float(vm.max()))):
+                bad = [(it, stt, eff) for it, stt, eff in PlantEquipmentCatalog.evaluate(volt, "Subestación")
+                       if not stt.startswith("✅")]
+                if bad:
+                    st.markdown(f"**Con la {label} ({volt:.3f} pu):**")
+                    for it, stt, eff in bad:
+                        st.write(f"{stt} — **{it.name}**: {eff}")
+                else:
+                    st.write(f"✅ Con la {label} ({volt:.3f} pu) ningún equipo de la subestación está en riesgo.")
         taps = list(range(-8, 9))
         vmin_t, vmax_t = [], []
         for tp in taps:
@@ -1560,6 +1719,74 @@ class SixBusNetworkModule(LabModule):
              "Efecto en V": "Sube/baja todo aguas abajo", "Cuándo": "Ajuste global; no crea Q"},
             {"Dispositivo": "Inversor renovable", "Acción": "Inyecta o absorbe Q (FP 0.95)",
              "Efecto en V": "Sube/baja en su barra", "Cuándo": "Control fino de tensión"}])
+
+
+# ----------------------------- Módulo 10 -------------------------------------
+@register_module
+class PlantEquipmentModule(LabModule):
+    """Equipos de la central y de la subestación afectados por la tensión."""
+
+    module_id, title, icon = "m10", "10. Equipos de central y subestación", "🏭"
+    objective = ("Obtener la lista específica de equipos que quedan en riesgo o se dañan cuando "
+                 "la tensión sube o baja en una central o en una subestación.")
+
+    def render(self) -> None:
+        a, b = st.columns([1, 2])
+        loc = a.radio("Instalación", ["Central generadora", "Subestación", "Ambas"], key=self.key("loc"))
+        v = b.slider("Tensión de operación sostenida [pu]", 0.60, 1.40, 1.12, 0.01, key=self.key("v"))
+        scope = None if loc == "Ambas" else loc
+        res = PlantEquipmentCatalog.evaluate(float(v), scope)
+        dmg = [(it, e) for it, s, e in res if s.startswith("⛔")]
+        risk = [(it, e) for it, s, e in res if s.startswith("⚠️")]
+        kpi_row([("Tensión", f"{v:.2f} pu", "Sobretensión" if v > 1.05 else ("Subtensión" if v < 0.95 else None)),
+                 ("⛔ Fallan / se dañan", str(len(dmg)), None),
+                 ("⚠️ En riesgo", str(len(risk)), None),
+                 ("✅ Normales", str(len(res) - len(dmg) - len(risk)), None)])
+        tag = (lambda it: f"**{it.name}**" + ("" if scope else f" ({it.location})"))
+        if dmg:
+            st.error("**⛔ Equipos que se dañan o fallan:**\n\n" +
+                     "\n".join(f"- {tag(it)}: {e}" for it, e in dmg))
+        if risk:
+            st.warning("**⚠️ Equipos en riesgo (operación sostenida no recomendada):**\n\n" +
+                       "\n".join(f"- {tag(it)}: {e}" for it, e in risk))
+        if not dmg and not risk:
+            st.success("Todos los equipos operan dentro de su rango de tensión.")
+        lo, hi = PlantEquipmentCatalog.AXIS
+        fig = go.Figure()
+        segs = (("Falla / daño", "#e74c3c"), ("Riesgo", "#f5a623"), ("Normal", "#2ecc71"),
+                ("Riesgo ", "#f5a623"), ("Falla / daño ", "#e74c3c"))
+        items = [it for it, _, _ in res]
+        widths: List[List[float]] = [[] for _ in segs]
+        for it in items:
+            d_lo = it.v_dmg_low if it.v_dmg_low is not None else lo
+            w_lo = it.v_warn_low if it.v_warn_low is not None else d_lo
+            for k, w in enumerate((d_lo - lo, w_lo - d_lo, it.v_warn_high - w_lo,
+                                   it.v_dmg_high - it.v_warn_high, hi - it.v_dmg_high)):
+                widths[k].append(max(w, 0.0))
+        names = [it.name for it in items]
+        fig.add_trace(go.Bar(y=names, x=[lo] * len(names), orientation="h", showlegend=False, marker_color="rgba(0,0,0,0)", hoverinfo="skip"))
+        for (label, color), w in zip(segs, widths):
+            fig.add_trace(go.Bar(y=names, x=w, base=None, orientation="h", name=label.strip(),
+                                 marker_color=color, showlegend=not label.endswith(" "),
+                                 hoverinfo="skip"))
+        fig.update_layout(barmode="stack")
+        fig.update_xaxes(range=[lo, hi])
+        fig.update_yaxes(autorange="reversed")
+        fig.add_vline(x=float(v), line_width=3, line_dash="dash", line_color="white" if self.ctx.dark else "black")
+        fig.update_layout(hovermode=False)
+        show(style_fig(fig, self.ctx, "Rango seguro de cada equipo (la línea marca la tensión elegida)",
+                       "V [pu]", "", 90 + 30 * len(items)))
+        md_table([{"Equipo": it.name, "Instalación": it.location, "Estado": s,
+                   "Efecto": e} for it, s, e in res])
+        st.caption("Límites ILUSTRATIVOS para operación sostenida. Para estudios reales use los datos de placa "
+                   "y las normas aplicables a cada equipo.")
+        render_quiz(self.module_id, [
+            Question("Un transformador de potencia opera sostenido a 1.12 pu (frecuencia nominal). Su estado es:",
+                     ("Normal", "En riesgo", "Falla / daño"), 2,
+                     "Supera 1.10 pu: sobreexcitación, saturación del núcleo, calentamiento y gases en el aceite."),
+            Question("Al bajar la tensión, ¿qué pasa con un banco de capacitores?",
+                     ("Entrega más reactivo", "Entrega menos reactivo (Q ∝ V²)", "No cambia"), 1,
+                     "La potencia reactiva de un capacitor es proporcional a V², justo cuando más se necesita.")])
 
 # =============================================================================
 # 4. PUNTO DE ENTRADA
