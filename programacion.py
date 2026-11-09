@@ -1795,9 +1795,9 @@ class PlantEquipmentModule(LabModule):
 
 def main() -> None:
     """Ensambla el dashboard: barra lateral, tema y pestañas por módulo."""
-    st.set_page_config(page_title="Laboratorio Virtual SEP", page_icon="⚡", layout="wide")
+    st.set_page_config(page_title="Laboratorio Virtual CSEP", page_icon="⚡", layout="wide")
     with st.sidebar:
-        st.title("⚡ Lab Virtual SEP")
+        st.title("⚡ Lab Virtual CSEP")
         theme = st.radio("Tema", ["Oscuro industrial", "Claro"], key="theme")
         f0 = float(st.radio("Frecuencia nominal [Hz]", [60, 50], horizontal=True, key="f0"))
         st.caption("Modelos didácticos simplificados. Valores en por unidad (pu).")
@@ -1805,7 +1805,7 @@ def main() -> None:
     dark = theme.startswith("Oscuro")
     ctx = AppContext(f0=f0, template="plotly_dark" if dark else "plotly_white", dark=dark)
     inject_css(dark)
-    st.title("Laboratorio Virtual de Sistemas Eléctricos de Potencia")
+    st.title("Laboratorio Virtual de Control de Sistemas Eléctricos de Potencia")
     # EXTENSIÓN: los módulos nuevos se registran con @register_module y aparecen aquí solos.
     modules = [cls(ctx) for cls in MODULE_REGISTRY]
     for tab, module in zip(st.tabs([f"{m.icon} {m.title}" for m in modules]), modules):
